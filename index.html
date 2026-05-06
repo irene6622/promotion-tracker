@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>異動促銷追蹤工具</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --red:    #E24B4A; --red-bg:    #FCEBEB; --red-txt:    #A32D2D;
+    --amber:  #EF9F27; --amber-bg:  #FAEEDA; --amber-txt:  #854F0B;
+    --blue:   #378ADD; --blue-bg:   #E6F1FB; --blue-txt:   #185FA5;
+    --green:  #639922; --green-bg:  #EAF3DE; --green-txt:  #3B6D11;
+    --gray-bg: #F1EFE8; --gray-txt: #5F5E5A;
+    --border: #e2e0d8;
+    --surface: #fafaf8;
+    --text: #1a1a18;
+    --muted: #6b6b67;
+    --hint: #a0a09a;
+    --card: #ffffff;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif; background: var(--surface); color: var(--text); font-size: 14px; line-height: 1.6; }
+  h1 { font-size: 20px; font-weight: 600; }
+
+  /* ── Layout ── */
+  .app { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+
+  /* ── Upload zone ── */
+  .upload-zone { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; margin-bottom: 20px; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--blue); background: var(--blue-bg); }
+  .upload-zone input { display: none; }
+  .upload-label { color: var(--muted); font-size: 14px; }
+  .upload-label b { color: var(--blue-txt); }
+  .file-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; justify-content: center; }
+  .chip { display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 13px; }
+  .chip .del { cursor: pointer; color: var(--hint); font-size: 16px; line-height: 1; }
+  .chip .del:hover { color: var(--red); }
+
+  /* ── Alert banners ── */
+  #alert-area { margin-bottom: 20px; }
+  .alert-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .alert-card { border-radius: var(--radius); padding: 14px 16px; border-left: 4px solid; }
+  .alert-today { background: #FCEBEB; border-color: var(--red); }
+  .alert-tomorrow { background: #FAEEDA; border-color: var(--amber); }
+  .alert-tag { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
+  .alert-today .alert-tag { color: var(--red-txt); }
+  .alert-tomorrow .alert-tag { color: var(--amber-txt); }
+  .alert-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .alert-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .alert-section-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .pulse-red { background: var(--red); animation: pulse 1.4s infinite; }
+  .pulse-amber { background: var(--amber); animation: pulse 1.4s .3s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+
+  /* ── Controls ── */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { padding: 6px 16px; border: 1px solid var(--border); border-radius: 20px; font-size: 13px; cursor: pointer; background: var(--card); color: var(--muted); transition: all .15s; white-space: nowrap; }
+  .tab.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .search-box { padding: 6px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 13px; outline: none; min-width: 180px; background: var(--card); }
+  .search-box:focus { border-color: var(--blue); }
+  .filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--card); color: var(--muted); transition: all .15s; }
+  .filter-btn.on { font-weight: 600; }
+  .filter-btn.f-all.on  { background: var(--text); color: #fff; border-color: var(--text); }
+  .filter-btn.f-new.on  { background: var(--green-bg); color: var(--green-txt); border-color: var(--green); }
+  .filter-btn.f-del.on  { background: var(--red-bg); color: var(--red-txt); border-color: var(--red); }
+  .filter-btn.f-chg.on  { background: var(--amber-bg); color: var(--amber-txt); border-color: var(--amber); }
+  .filter-btn.f-same.on { background: var(--gray-bg); color: var(--gray-txt); border-color: #ccc; }
+
+  /* ── Date navigator ── */
+  .date-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .date-nav select { padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; background: var(--card); }
+
+  /* ── Table ── */
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; }
+  .sec-header { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .sec-header strong { font-weight: 600; }
+  .sec-header .period { color: var(--muted); font-size: 12px; }
+  .sec-header .cnt { margin-left: auto; color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th { padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr.row-new  td { background: #f2fae8; }
+  tr.row-del  td { background: #fff4f4; opacity: .75; }
+  tr.row-chg  td { background: #fffbf0; }
+  .col-num   { width: 36px; color: var(--hint); font-size: 12px; }
+  .col-vendor{ width: 80px; color: var(--muted); font-size: 12px; }
+  .col-sku   { width: 88px; color: var(--hint); font-size: 11px; }
+  .col-name  { }
+  .col-orig  { width: 56px; color: var(--muted); text-align: right; }
+  .col-promo { width: 62px; text-align: right; font-weight: 600; }
+  .col-status{ width: 130px; }
+  .badges    { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+  .b-down  { background: var(--red-bg);   color: var(--red-txt); }
+  .b-up    { background: var(--amber-bg); color: var(--amber-txt); }
+  .b-same  { background: var(--gray-bg);  color: var(--gray-txt); }
+  .b-buy2  { background: var(--blue-bg);  color: var(--blue-txt); }
+  .b-new   { background: var(--green-bg); color: var(--green-txt); }
+  .b-del   { background: var(--red-bg);   color: var(--red-txt); }
+  .b-chg   { background: var(--amber-bg); color: var(--amber-txt); }
+  .b-cancel{ background: var(--gray-bg);  color: var(--gray-txt); }
+  .diff-arrow { font-size: 11px; color: var(--muted); }
+
+  /* ── Empty / intro states ── */
+  .empty-state { padding: 48px; text-align: center; color: var(--muted); }
+  .empty-icon  { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── Summary bar ── */
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font-size: 13px; }
+  .stat-num { font-size: 22px; font-weight: 700; line-height: 1; }
+  .stat-lbl { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .stat-new .stat-num { color: var(--green); }
+  .stat-del .stat-num { color: var(--red); }
+  .stat-chg .stat-num { color: var(--amber); }
+  .stat-total .stat-num { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="top-bar">
+    <h1>異動促銷追蹤工具</h1>
+    <span id="today-label" style="font-size:13px;color:var(--muted)"></span>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="drop-zone">
+    <input type="file" id="file-input" accept=".xls,.xlsx" multiple>
+    <div class="upload-label">
+      <div style="font-size:28px;margin-bottom:8px">📂</div>
+      <p>拖拉 XLS 檔案到這裡，或 <b>點擊選擇檔案</b></p>
+      <p style="font-size:12px;margin-top:4px;color:var(--hint)">支援多檔同時上傳，自動依日期排序比對</p>
+    </div>
+    <div class="file-chips" id="file-chips"></div>
+  </div>
+
+  <!-- Alert banners -->
+  <div id="alert-area"></div>
+
+  <!-- Summary -->
+  <div class="summary" id="summary" style="display:none"></div>
+
+  <!-- Controls -->
+  <div class="controls" id="controls" style="display:none">
+    <div class="tabs" id="cat-tabs"></div>
+    <input type="text" class="search-box" id="search" placeholder="搜尋品名、貨號…" oninput="renderTable()">
+    <div class="filter-row">
+      <button class="filter-btn f-all on" onclick="setFilter('all',this)">全部</button>
+      <button class="filter-btn f-new" onclick="setFilter('new',this)">新增</button>
+      <button class="filter-btn f-del" onclick="setFilter('del',this)">刪除</button>
+      <button class="filter-btn f-chg" onclick="setFilter('chg',this)">變動</button>
+      <button class="filter-btn f-same" onclick="setFilter('same',this)">未變</button>
+    </div>
+    <div class="date-nav">
+      <label style="font-size:12px;color:var(--muted)">比對基準：</label>
+      <select id="base-sel" onchange="renderAll()"></select>
+      <span style="font-size:12px;color:var(--muted)">→</span>
+      <select id="cmp-sel" onchange="renderAll()"></select>
+    </div>
+  </div>
+
+  <!-- Table output -->
+  <div id="table-area"></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const files   = {};   // filename → parsed data
+let activeCat = null;
+let activeFilter = 'all';
+const TODAY   = new Date(); TODAY.setHours(0,0,0,0);
+const TOMORROW = new Date(TODAY); TOMORROW.setDate(TOMORROW.getDate()+1);
+
+document.getElementById('today-label').textContent = `今日：${fmtDate(TODAY)}`;
+
+// ── Upload handling ────────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(flist) {
+  Array.from(flist).forEach(f => {
+    const r = new FileReader();
+    r.onload = ev => {
+      const wb = XLSX.read(ev.target.result, { type:'array', cellDates:true });
+      files[f.name] = parseWorkbook(wb, f.name);
+      renderChips();
+      renderAll();
+    };
+    r.readAsArrayBuffer(f);
+  });
+}
+
+function renderChips() {
+  const c = document.getElementById('file-chips');
+  c.innerHTML = Object.keys(files).sort().map(name =>
+    `<div class="chip"><span>📄 ${name}</span><span class="del" onclick="removeFile('${name}')">×</span></div>`
+  ).join('');
+}
+
+function removeFile(name) {
+  delete files[name];
+  renderChips();
+  renderAll();
+}
+
+// ── Parse XLS ─────────────────────────────────────────────────────────────
+function parseWorkbook(wb, fname) {
+  const result = {};
+  wb.SheetNames.forEach(sname => {
+    const ws  = wb.Sheets[sname];
+    const raw = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+    result[sname] = parseSheet(raw, sname);
+  });
+  return result;
+}
+
+function parseSheet(rows, sheetName) {
+  const sections = [];
+  let curSection = null;
+  let headerIdx  = -1;
+
+  const isHeader = r => r && (String(r[0]||'').includes('項') || String(r[0]||'').includes('項\n次'));
+  const isSectionLabel = r => r && (String(r[0]||'').includes('促銷點') || String(r[1]||'').includes('促銷點'));
+  const isPeriodRow = r => r && (String(r[0]||'').includes('促銷期間') || String(r[1]||'').includes('促銷期間'));
+  const isTitleRow  = r => r && String(r[0]||'').includes('降價促銷品項');
+
+  let pendingLabel = ''; let pendingPeriod = '';
+  let startDate = null; let endDate = null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.every(c => c === null)) continue;
+
+    if (isTitleRow(r)) { pendingLabel=''; pendingPeriod=''; startDate=null; endDate=null; continue; }
+
+    if (isSectionLabel(r)) {
+      const txt = (r[0]||r[1]||'').toString().replace(/促銷點[：:]/,'').trim();
+      const txt2 = (r[2]||'').toString().trim();
+      pendingLabel = txt2 || txt;
+      continue;
+    }
+
+    if (isPeriodRow(r)) {
+      const d1 = r[2]; const d2 = r[4];
+      startDate = parseDate(d1); endDate = parseDate(d2);
+      if (!startDate && !endDate) {
+        const fullTxt = r.map(x=>x||'').join(' ');
+        const m = fullTxt.match(/(\d{4}[\/-]\d{1,2}[\/-]\d{1,2})/g);
+        if (m && m[0]) startDate = parseDate(m[0]);
+        if (m && m[1]) endDate   = parseDate(m[1]);
+      }
+      const periodStr = [fmtDate(startDate), fmtDate(endDate)].filter(Boolean).join(' ～ ');
+      pendingPeriod = periodStr;
+      // Emit section if we have rows waiting, start new
+      curSection = { label: pendingLabel, period: pendingPeriod, startDate, endDate, rows:[] };
+      sections.push(curSection);
+      headerIdx = -1;
+      continue;
+    }
+
+    if (isHeader(r)) { headerIdx = i; continue; }
+
+    if (headerIdx >= 0 && curSection) {
+      // data row
+      const num = r[0]; if (!num && !r[3] && !r[4]) continue;
+      const numStr = (num||'').toString().trim();
+      if (!numStr || numStr === 'NaN') continue;
+
+      const isOnlyBuy2 = numStr === '' && (String(r[4]||'').includes('買'));
+      if (String(r[4]||'').includes('買') || String(r[3]||'').includes('買2') || String(r[2]||'').includes('買2')) {
+        // buy2 supplement row — attach to last row
+        const last = curSection.rows[curSection.rows.length-1];
+        if (last) {
+          const price = r[6] || r[5];
+          if (price && !isNaN(+price)) last.buy2 = +price;
+          if (String(r[7]||r[6]||'').includes('取消')) last.cancelBuy2 = true;
+        }
+        continue;
+      }
+
+      // parse name & sku depending on sheet
+      let vendor='', sku='', name='', orig=0, promo=0;
+      if (sheetName.includes('生鮮')) {
+        vendor = (r[1]||'').toString().trim();
+        sku    = (r[3]||'').toString().trim();
+        name   = (r[4]||'').toString().trim();
+        orig   = +(r[5]||0); promo = +(r[6]||0);
+      } else if (sheetName.includes('用品')) {
+        vendor = (r[1]||'').toString().trim();
+        sku    = (r[2]||'').toString().trim();
+        name   = (r[3]||'').toString().trim();
+        orig   = +(r[4]||0); promo = +(r[5]||0);
+      } else {
+        vendor = (r[1]||'').toString().trim();
+        sku    = (r[3]||'').toString().trim();
+        name   = (r[4]||'').toString().trim();
+        orig   = +(r[5]||0); promo = +(r[6]||0);
+      }
+      if (!name) continue;
+      // exclude supermarket-only (crude: label contains 超市 but not 量販)
+      if (curSection.label && curSection.label.includes('超市') && !curSection.label.includes('量販') && !curSection.label.includes('+')) continue;
+
+      curSection.rows.push({ num: numStr, vendor, sku, name, orig, promo, buy2: null, cancelBuy2: false });
+    }
+  }
+  return sections.filter(s => s.rows.length > 0);
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) { const d=new Date(val); d.setHours(0,0,0,0); return d; }
+  const s = val.toString().trim();
+  // handles 2026-05-07, 2026/05/07, 115年05月08日
+  let m = s.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (m) return new Date(+m[1],+m[2]-1,+m[3]);
+  m = s.match(/(\d{3})年(\d{1,2})月(\d{1,2})日/);
+  if (m) return new Date(+m[1]+1911, +m[2]-1, +m[3]);
+  m = s.match(/(\d{3})年(\d{1,2})月(\d{1,2})/);
+  if (m) return new Date(+m[1]+1911, +m[2]-1, +m[3]);
+  return null;
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// ── Render all ─────────────────────────────────────────────────────────────
+function renderAll() {
+  const names = Object.keys(files).sort();
+  if (!names.length) {
+    document.getElementById('controls').style.display='none';
+    document.getElementById('summary').style.display='none';
+    document.getElementById('table-area').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>請上傳一或多份異動促銷 XLS 檔案<br>支援每日比對與活動提醒</p></div>`;
+    document.getElementById('alert-area').innerHTML='';
+    return;
+  }
+
+  // Build selects
+  const baseSel = document.getElementById('base-sel');
+  const cmpSel  = document.getElementById('cmp-sel');
+  const prevBase = baseSel.value, prevCmp = cmpSel.value;
+
+  baseSel.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  cmpSel.innerHTML  = ['（無比對）',...names].map((n,i)=>`<option value="${i===0?'':n}">${n||'（無比對）'}</option>`).join('');
+
+  if (names.includes(prevBase)) baseSel.value = prevBase;
+  if (names.includes(prevCmp))  cmpSel.value  = prevCmp;
+  else if (names.length >= 2)   { baseSel.value = names[names.length-2]; cmpSel.value = names[names.length-1]; }
+
+  // Categories from current file
+  const baseFile = files[baseSel.value] || {};
+  const cats = Object.keys(baseFile).map(k => k.replace('降價_',''));
+  if (!activeCat || !cats.includes(activeCat)) activeCat = cats[0] || null;
+
+  // Render tabs
+  const tabsEl = document.getElementById('cat-tabs');
+  tabsEl.innerHTML = cats.map(c => `<button class="tab${c===activeCat?' active':''}" onclick="setTab('${c}')">${c}</button>`).join('');
+
+  document.getElementById('controls').style.display='flex';
+  document.getElementById('summary').style.display='flex';
+
+  renderAlerts(baseFile);
+  renderSummary(baseSel.value, cmpSel.value);
+  renderTable();
+}
+
+// ── Alert banners ──────────────────────────────────────────────────────────
+function renderAlerts(baseFile) {
+  const area = document.getElementById('alert-area');
+  const todayItems = [], tomorrowItems = [];
+
+  Object.entries(baseFile).forEach(([sheet, sections]) => {
+    sections.forEach(sec => {
+      if (!sec.startDate) return;
+      const sd = new Date(sec.startDate); sd.setHours(0,0,0,0);
+      const ed = sec.endDate ? new Date(sec.endDate) : null; if(ed) ed.setHours(0,0,0,0);
+      // Only show if still active (end date not passed)
+      if (ed && ed < TODAY) return;
+      const diff = Math.round((sd - TODAY) / 86400000);
+      const cat = sheet.replace('降價_','');
+      const item = { cat, label: sec.label, period: sec.period, count: sec.rows.length, diff };
+      if (diff === 0) todayItems.push(item);
+      else if (diff === 1) tomorrowItems.push(item);
+    });
+  });
+
+  let html = '';
+  if (todayItems.length) {
+    html += `<div class="alert-section-label"><span class="pulse pulse-red"></span>今日開始活動</div>`;
+    html += `<div class="alert-grid">` + todayItems.map(it => `
+      <div class="alert-card alert-today">
+        <div class="alert-tag">今日開始</div>
+        <div class="alert-title">${it.label || '（未命名）'}</div>
+        <div class="alert-sub">${it.cat}・${it.period}・共 ${it.count} 項</div>
+      </div>`).join('') + `</div>`;
+  }
+  if (tomorrowItems.length) {
+    html += `<div class="alert-section-label" style="margin-top:${todayItems.length?'14px':'0'}"><span class="pulse pulse-amber"></span>明日開始活動</div>`;
+    html += `<div class="alert-grid">` + tomorrowItems.map(it => `
+      <div class="alert-card alert-tomorrow">
+        <div class="alert-tag">明日開始</div>
+        <div class="alert-title">${it.label || '（未命名）'}</div>
+        <div class="alert-sub">${it.cat}・${it.period}・共 ${it.count} 項</div>
+      </div>`).join('') + `</div>`;
+  }
+  area.innerHTML = html ? `<div style="margin-bottom:20px">${html}</div>` : '';
+}
+
+// ── Diff logic ─────────────────────────────────────────────────────────────
+function diffSections(baseSections, cmpSections) {
+  const cmpMap = {};
+  (cmpSections||[]).forEach(sec => sec.rows.forEach(r => { cmpMap[r.sku||r.name] = r; }));
+
+  return baseSections.map(sec => ({
+    ...sec,
+    rows: sec.rows.map(r => {
+      const key = r.sku || r.name;
+      const prev = cmpMap[key];
+      if (!cmpSections) return { ...r, diff: 'same' };
+      if (!prev) return { ...r, diff: 'new' };
+      if (prev.promo !== r.promo || prev.orig !== r.orig) return { ...r, diff: 'chg', prevOrig: prev.orig, prevPromo: prev.promo };
+      return { ...r, diff: 'same' };
+    })
+  }));
+}
+
+function findDeleted(baseSections, cmpSections) {
+  if (!cmpSections) return [];
+  const baseKeys = new Set();
+  baseSections.forEach(s => s.rows.forEach(r => baseKeys.add(r.sku||r.name)));
+  const deleted = [];
+  cmpSections.forEach(sec => sec.rows.forEach(r => {
+    if (!baseKeys.has(r.sku||r.name)) deleted.push({ ...r, diff:'del', secLabel: sec.label, secPeriod: sec.period });
+  }));
+  return deleted;
+}
+
+// ── Summary ────────────────────────────────────────────────────────────────
+function renderSummary(baseName, cmpName) {
+  const base = files[baseName] || {};
+  const cmp  = cmpName ? files[cmpName] : null;
+  let total=0, nNew=0, nDel=0, nChg=0;
+  Object.entries(base).forEach(([sheet, secs]) => {
+    const cmpSecs = cmp ? (cmp[sheet]||[]) : null;
+    const diffed  = diffSections(secs, cmpSecs);
+    diffed.forEach(s => s.rows.forEach(r => { total++; if(r.diff==='new') nNew++; if(r.diff==='chg') nChg++; }));
+    if (cmpSecs) nDel += findDeleted(secs, cmpSecs).length;
+  });
+  const el = document.getElementById('summary');
+  el.innerHTML = `
+    <div class="stat stat-total"><div class="stat-num">${total}</div><div class="stat-lbl">品項總數</div></div>
+    <div class="stat stat-new"><div class="stat-num">${nNew}</div><div class="stat-lbl">新增品項</div></div>
+    <div class="stat stat-del"><div class="stat-num">${nDel}</div><div class="stat-lbl">刪除品項</div></div>
+    <div class="stat stat-chg"><div class="stat-num">${nChg}</div><div class="stat-lbl">價格變動</div></div>
+  `;
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable() {
+  const baseName = document.getElementById('base-sel').value;
+  const cmpName  = document.getElementById('cmp-sel').value;
+  const base = files[baseName] || {};
+  const cmp  = cmpName ? files[cmpName] : null;
+  const q    = document.getElementById('search').value.trim().toLowerCase();
+  const sheetKey = Object.keys(base).find(k => k.includes(activeCat)) || Object.keys(base)[0];
+  if (!sheetKey) { document.getElementById('table-area').innerHTML=''; return; }
+
+  const baseSecs = base[sheetKey] || [];
+  const cmpSecs  = cmp ? (cmp[sheetKey]||[]) : null;
+  const diffed   = diffSections(baseSecs, cmpSecs);
+  const deleted  = findDeleted(baseSecs, cmpSecs);
+
+  let html = '';
+
+  // Deleted section
+  if (deleted.length && (activeFilter==='all'||activeFilter==='del')) {
+    const visible = deleted.filter(r => !q || r.name.toLowerCase().includes(q) || r.sku.includes(q));
+    if (visible.length) {
+      html += `<div class="table-wrap"><div class="sec-header" style="background:#fff4f4"><strong style="color:var(--red-txt)">已刪除品項</strong><span class="cnt">${visible.length} 項</span></div><table>`;
+      html += tableHead();
+      html += '<tbody>' + visible.map(r => rowHtml(r, true)).join('') + '</tbody></table></div>';
+    }
+  }
+
+  diffed.forEach(sec => {
+    let rows = sec.rows.filter(r => {
+      if (activeFilter !== 'all' && r.diff !== activeFilter) return false;
+      if (q && !r.name.toLowerCase().includes(q) && !r.sku.includes(q)) return false;
+      return true;
+    });
+    if (!rows.length) return;
+    html += `<div class="table-wrap">
+      <div class="sec-header">
+        <strong>${sec.label||'（未命名區段）'}</strong>
+        <span class="period">${sec.period}</span>
+        <span class="cnt">${rows.length} 項</span>
+      </div>
+      <table>${tableHead()}<tbody>${rows.map(r=>rowHtml(r,false)).join('')}</tbody></table>
+    </div>`;
+  });
+
+  if (!html) html = `<div class="empty-state"><p>沒有符合條件的品項</p></div>`;
+  document.getElementById('table-area').innerHTML = html;
+}
+
+function tableHead() {
+  return `<thead><tr>
+    <th class="col-num">#</th>
+    <th class="col-vendor">廠編</th>
+    <th class="col-sku">貨號</th>
+    <th class="col-name">品名</th>
+    <th class="col-orig">原價</th>
+    <th class="col-promo">促銷價</th>
+    <th class="col-status">狀態</th>
+  </tr></thead>`;
+}
+
+function rowHtml(r, isDel) {
+  const cls = isDel ? 'row-del' : (r.diff==='new'?'row-new': r.diff==='chg'?'row-chg':'');
+  const priceBadge = r.promo < r.orig ? `<span class="badge b-down">降價</span>` : r.promo > r.orig ? `<span class="badge b-up">調漲</span>` : `<span class="badge b-same">持價</span>`;
+  const diffBadge  = r.diff==='new' ? `<span class="badge b-new">新增</span>` : r.diff==='del'||isDel ? `<span class="badge b-del">刪除</span>` : r.diff==='chg' ? `<span class="badge b-chg">變動</span>` : '';
+  const buy2Badge  = r.buy2 ? `<span class="badge b-buy2">買2特$${r.buy2}</span>` : '';
+  const cancelBadge= r.cancelBuy2 ? `<span class="badge b-cancel">取消買2特</span>` : '';
+  const diffArrow  = r.diff==='chg' ? `<div class="diff-arrow">原 ${r.prevOrig||''} → ${r.prevPromo||''}</div>` : '';
+
+  return `<tr class="${cls}">
+    <td class="col-num">${r.num}</td>
+    <td class="col-vendor">${r.vendor}</td>
+    <td class="col-sku">${r.sku}</td>
+    <td class="col-name">${r.name}${diffArrow}</td>
+    <td class="col-orig">${r.orig||''}</td>
+    <td class="col-promo">${r.promo||''}</td>
+    <td class="col-status"><div class="badges">${priceBadge}${diffBadge}${buy2Badge}${cancelBadge}</div></td>
+  </tr>`;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function setTab(cat) {
+  activeCat = cat;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent===cat));
+  renderTable();
+}
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderTable();
+}
+
+// Init
+renderAll();
+</script>
+</body>
+</html>
