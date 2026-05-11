@@ -1,37 +1,43 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>促銷追蹤系統</title>
+    <title>促銷異動追蹤系統</title>
     <script src="data.js"></script>
     <style>
-        :root { --primary: #e24b4a; --bg: #f5f5f3; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; }
-        .nav-wrapper { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; margin-bottom: 15px; }
-        .date-btn { flex: 0 0 80px; padding: 10px 5px; background: white; border: 1px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; font-size: 14px; }
-        .date-btn.active { background: #333; color: white; border-color: #333; }
+        :root { --primary: #e24b4a; --bg: #f5f5f3; --del: #999; }
+        body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; }
+        .nav-wrapper { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; }
+        .date-btn { flex: 0 0 75px; padding: 10px 5px; background: white; border: 1px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; }
+        .date-btn.active { background: #333; color: white; }
         .date-btn.today { border: 2px solid var(--primary); color: var(--primary); font-weight: bold; }
-        
-        .filter-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
-        .f-btn { padding: 6px 12px; background: #fff; border: 1px solid #ccc; border-radius: 20px; cursor: pointer; font-size: 12px; }
+        .filter-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+        .f-btn { padding: 8px 12px; background: #fff; border: 1px solid #ccc; border-radius: 20px; cursor: pointer; font-size: 13px; }
         .f-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
-
-        .card { background: white; border-radius: 10px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid #eee; }
-        .card-hd { padding: 10px; background: #f8f9fa; font-weight: bold; font-size: 13px; display: flex; justify-content: space-between; border-bottom: 1px solid #eee; }
+        .f-btn.active.del-mode { background: #555; border-color: #555; }
+        
+        .card { background: white; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow: hidden; }
+        .card-hd { padding: 10px; background: #f8f9fa; font-weight: bold; font-size: 13px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
         table { width: 100%; border-collapse: collapse; }
-        td { padding: 10px; border-bottom: 1px solid #eee; vertical-align: top; }
-        .price { color: var(--primary); font-weight: bold; font-size: 16px; }
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: #f0f0f0; margin-top: 5px; }
+        td { padding: 12px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+        
+        /* 狀態樣式 */
+        tr.is-delete { background-color: #f0f0f0; color: var(--del); }
+        tr.is-delete .price { color: var(--del); text-decoration: line-through; }
+        
+        .p-name { font-size: 15px; font-weight: bold; display: block; margin-bottom: 3px; }
+        .price { color: var(--primary); font-weight: bold; font-size: 17px; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 5px; font-weight: bold; background: #eee; }
+        .b-del { background: #555; color: white; }
+        .b-b1g1 { background: #fff0f0; color: red; border: 1px solid red; }
     </style>
 </head>
 <body>
-
-    <h3 id="view-title">促銷資料載入中...</h3>
-    <div class="nav-wrapper" id="date-nav"></div>
-
-    <div class="filter-group" id="cat-filters">
-        <button class="f-btn active" onclick="setCat('全部', this)">全部類別</button>
+    <div id="date-nav" class="nav-wrapper"></div>
+    
+    <div class="filter-group">
+        <button class="f-btn active" onclick="setCat('全部', this)">全部</button>
         <button class="f-btn" onclick="setCat('食品', this)">食品</button>
         <button class="f-btn" onclick="setCat('用品', this)">用品</button>
         <button class="f-btn" onclick="setCat('生鮮', this)">生鮮</button>
@@ -40,102 +46,80 @@
     <div class="filter-group">
         <button class="f-btn" id="f-b1g1" onclick="toggleF('b1g1')">🎁 買1送1</button>
         <button class="f-btn" id="f-buy2" onclick="toggleF('buy2')">💙 2特</button>
-        <button class="f-btn" id="f-end" onclick="toggleF('end')">⌛ 今日到期</button>
+        <button class="f-btn" id="f-isDelete" onclick="toggleF('isDelete', true)">❌ 刪除/取消</button>
     </div>
 
     <div id="main-content"></div>
 
     <script>
-        // 日期計算
-        function getD(offset) {
-            const d = new Date();
-            d.setDate(d.getDate() + offset);
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return { full: y + "-" + m + "-" + day, short: (d.getMonth()+1) + "/" + d.getDate(), label: offset === 0 ? "今天" : offset + "D" };
+        function getD(o) {
+            const d = new Date(); d.setDate(d.getDate() + o);
+            const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), r = String(d.getDate()).padStart(2,'0');
+            return { full: y+"-"+m+"-"+r, short: (d.getMonth()+1)+"/"+d.getDate(), label: o===0?"今天":o+"D" };
         }
-
-        let curDate = getD(0).full;
-        let curCat = '全部';
-        let filters = { b1g1: false, buy2: false, end: false };
-
-        function init() {
-            if (typeof ALL_DATA === 'undefined') {
-                document.getElementById('main-content').innerHTML = "<div style='color:red; text-align:center; padding:20px;'>❌ 錯誤：找不到資料檔案 data.js。<br>請確認已執行 Python 並產出檔案。</div>";
-                return;
-            }
-            document.getElementById('view-title').innerText = "📅 異動促銷追蹤";
-            buildNav();
-            render();
-        }
-
-        function buildNav() {
-            const nav = document.getElementById('date-nav');
-            nav.innerHTML = "";
-            for (let i = -3; i <= 3; i++) {
-                const info = getD(i);
-                const btn = document.createElement('div');
-                btn.className = "date-btn" + (i === 0 ? " today" : "") + (info.full === curDate ? " active" : "");
-                btn.innerHTML = info.short + "<br><small>" + info.label + "</small>";
-                btn.onclick = function() { curDate = info.full; buildNav(); render(); };
-                nav.appendChild(btn);
-            }
-        }
-
-        function setCat(cat, btn) {
-            curCat = cat;
-            document.querySelectorAll('#cat-filters .f-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            render();
-        }
-
-        function toggleF(t) {
-            filters[t] = !filters[t];
-            document.getElementById('f-' + t).classList.toggle('active');
-            render();
-        }
+        let curD = getD(0).full, curC = '全部', filters = { b1g1: false, buy2: false, isDelete: false };
 
         function render() {
-            const content = document.getElementById('main-content');
-            content.innerHTML = "";
+            const cont = document.getElementById('main-content'); cont.innerHTML = "";
+            if (typeof ALL_DATA === 'undefined') return;
             let found = false;
 
-            for (const file in ALL_DATA) {
-                for (const sheet in ALL_DATA[file]) {
-                    if (curCat !== '全部' && !sheet.includes(curCat)) continue;
+            for (const f in ALL_DATA) {
+                for (const s in ALL_DATA[f]) {
+                    if (curC !== '全部' && !s.includes(curC)) continue;
 
-                    ALL_DATA[file][sheet].forEach(sec => {
-                        const targetDate = filters.end ? sec.endDate : sec.startDate;
-                        if (targetDate !== curDate) return;
+                    ALL_DATA[f][s].forEach(sec => {
+                        if (sec.startDate !== curD) return;
 
                         const rows = sec.rows.filter(r => {
                             if (filters.b1g1 && !r.buy1get1) return false;
                             if (filters.buy2 && !r.buy2) return false;
+                            if (filters.isDelete && !r.isDelete) return false;
                             return true;
                         });
 
                         if (rows.length > 0) {
                             found = true;
-                            const card = document.createElement('div');
-                            card.className = "card";
-                            card.innerHTML = "<div class='card-hd'><span>" + sheet + " | " + sec.label + "</span><small>" + sec.startDate + " ~ " + sec.endDate + "</small></div>";
-                            let table = "<table>";
+                            let h = `<div class="card"><div class="card-hd"><span>${s}</span><small>${sec.startDate}</small></div><table>`;
                             rows.forEach(r => {
-                                table += "<tr><td><b>" + r.name + "</b><br><small style='color:#999'>" + r.sku + "</small></td>";
-                                table += "<td style='width:70px'><span class='price'>$" + r.promo + "</span><br><small style='text-decoration:line-through; color:#ccc'>$" + r.orig + "</small></td>";
-                                table += "<td>" + (r.buy1get1 ? "<span class='badge' style='color:red'>🎁 買1送1</span> " : "") + (r.buy2 ? "<span class='badge' style='color:blue'>💙 2特$" + r.buy2 + "</span>" : "") + "<div style='font-size:11px; color:#888; margin-top:5px;'>" + r.note + "</div></td></tr>";
+                                const delCls = r.isDelete ? 'is-delete' : '';
+                                h += `<tr class="${delCls}"><td><span class="p-name">${r.name}</span><small>${r.sku}</small></td>
+                                    <td style="width:70px;text-align:right"><span class="price">$${r.promo}</span><br><small>$${r.orig}</small></td>
+                                    <td style="width:100px;text-align:right">
+                                        ${r.isDelete ? '<span class="badge b-del">❌ 已取消</span>' : ''}
+                                        ${r.buy1get1 ? '<span class="badge b-b1g1">🎁 買1送1</span>' : ''}
+                                        ${r.buy2 ? '<span class="badge" style="color:blue; border:1px solid blue;">💙 2特$'+r.buy2+'</span>' : ''}
+                                        <div style="font-size:10px; margin-top:4px;">${r.note}</div>
+                                    </td></tr>`;
                             });
-                            card.innerHTML += table + "</table>";
-                            content.appendChild(card);
+                            cont.innerHTML += h + "</table></div>";
                         }
                     });
                 }
             }
-            if (!found) content.innerHTML = "<p style='text-align:center; padding:40px; color:#999;'>" + curDate + " 無活動資料</p>";
+            if(!found) cont.innerHTML = `<p style="text-align:center;color:#999;padding-top:50px">${curD} 無資料</p>`;
         }
 
-        window.onload = init;
+        function buildNav() {
+            const n = document.getElementById('date-nav'); n.innerHTML = "";
+            for (let i=-3; i<=7; i++) {
+                const info = getD(i);
+                const b = document.createElement('div');
+                b.className = `date-btn ${i===0?'today':''} ${info.full===curD?'active':''}`;
+                b.innerHTML = `${info.short}<br><small>${info.label}</small>`;
+                b.onclick = () => { curD = info.full; buildNav(); render(); };
+                n.appendChild(b);
+            }
+        }
+        function setCat(c, b) { curC = c; document.querySelectorAll('.filter-group:first-child .f-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); render(); }
+        function toggleF(t, isDelBtn) { 
+            filters[t] = !filters[t]; 
+            const btn = document.getElementById('f-'+t);
+            btn.classList.toggle('active');
+            if(isDelBtn) btn.classList.toggle('del-mode');
+            render(); 
+        }
+        window.onload = () => { buildNav(); render(); };
     </script>
 </body>
 </html>
