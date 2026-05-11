@@ -97,6 +97,33 @@ tr.rc td{background:#fffbf0}
 .promo-sec-hd{padding:9px 14px;background:#fff8f0;border-bottom:1px solid #fde8d0;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap}
 .promo-sec-hd strong{font-weight:600;color:#c2410c}
 .b-b1g1{background:#fff0e6;color:#c2410c;font-weight:700}
+.fb.on.ftl{background:#eaf3de;color:#3b6d11;border-color:#639922}
+
+/* 時間軸 */
+.tl-wrap{margin-bottom:0}
+.tl-day{display:flex;gap:0;margin-bottom:24px}
+.tl-left{width:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding-top:4px}
+.tl-date-num{font-size:28px;font-weight:700;line-height:1}
+.tl-date-sub{font-size:11px;color:#888;margin-top:2px;text-align:center}
+.tl-dot{width:14px;height:14px;border-radius:50%;border:3px solid;margin-top:8px;flex-shrink:0}
+.tl-line{width:2px;background:#e2e0d8;flex:1;margin-top:4px}
+.tl-right{flex:1;padding-left:16px;padding-bottom:8px}
+.tl-badge-row{display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.tl-day-label{font-size:13px;font-weight:600}
+.tl-card{background:#fff;border:1px solid #e2e0d8;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;transition:.15s}
+.tl-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);transform:translateY(-1px)}
+.tl-card-hd{padding:9px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #f0efeb}
+.tl-card-hd strong{font-size:13px;font-weight:600}
+.tl-card-body{padding:0}
+.tl-empty{color:#bbb;font-size:13px;padding:8px 0 0}
+.day-today .tl-dot{border-color:#e24b4a;background:#e24b4a}
+.day-today .tl-date-num{color:#e24b4a}
+.day-today .tl-left{background:transparent}
+.day-past .tl-dot{border-color:#aaa;background:#fff}
+.day-past .tl-date-num{color:#aaa}
+.day-future .tl-dot{border-color:#639922;background:#fff}
+.day-future .tl-date-num{color:#3b6d11}
+.tl-no-data{padding:20px;text-align:center;color:#bbb;font-size:13px}
 </style>
 </head>
 <body>
@@ -122,6 +149,23 @@ tr.rc td{background:#fffbf0}
     <div id="promo-area"></div>
   </div>
 
+  <!-- 活動時間軸 -->
+  <div id="timeline-zone" style="display:none">
+    <div class="ctrl">
+      <input class="search" id="tl-search" placeholder="搜尋品名、貨號…" oninput="renderTimeline()">
+      <div class="filters">
+        <button class="fb ftl on" onclick="setTlF('all',this)">全部</button>
+        <button class="fb ftl"    onclick="setTlF('食品',this)">食品</button>
+        <button class="fb ftl"    onclick="setTlF('用品',this)">用品</button>
+        <button class="fb ftl"    onclick="setTlF('生鮮',this)">生鮮</button>
+        <button class="fb ftl"    onclick="setTlF('buy2',this)">💙買2特</button>
+        <button class="fb ftl"    onclick="setTlF('b1g1',this)">🎁買1送1</button>
+      </div>
+      <button class="fb" style="margin-left:auto" onclick="exitTimeline()">← 返回</button>
+    </div>
+    <div id="tl-area"></div>
+  </div>
+
   <!-- 一般模式 -->
   <div id="normal-zone">
     <div class="ctrl">
@@ -136,6 +180,7 @@ tr.rc td{background:#fffbf0}
         <button class="fb fb2"   onclick="setF('b1g1',this)">🎁 買1送1</button>
       </div>
       <button class="fb" style="background:#e6f1fb;color:#185fa5;border-color:#378add;font-weight:600" onclick="enterPromo()">🏷️ 特價專區</button>
+      <button class="fb" style="background:#eaf3de;color:#3b6d11;border-color:#639922;font-weight:600" onclick="enterTimeline()">📅 活動時間軸</button>
     </div>
     <div class="diff-legend" id="diff-legend" style="display:none">
       比對差異：
@@ -270,6 +315,168 @@ function setF(f, btn) {
   render();
 }
 
+// ── 活動時間軸 ────────────────────────────────────────────────────────────
+let tlFilter = 'all';
+
+function enterTimeline() {
+  document.getElementById('timeline-zone').style.display = '';
+  document.getElementById('normal-zone').style.display = 'none';
+  document.getElementById('promo-zone').style.display = 'none';
+  renderTimeline();
+}
+function exitTimeline() {
+  document.getElementById('timeline-zone').style.display = 'none';
+  document.getElementById('normal-zone').style.display = '';
+}
+function setTlF(f, btn) {
+  tlFilter = f;
+  document.querySelectorAll('.fb.ftl').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const q = document.getElementById('tl-search').value.trim().toLowerCase();
+
+  // 蒐集所有日期所有資料裡的 sections，建立 startDate → sections 的 map
+  const secByDate = {};
+  Object.entries(ALL).forEach(([fileDate, cats]) => {
+    Object.entries(cats).forEach(([cat, secs]) => {
+      secs.forEach((sec, idx) => {
+        if (!sec.startDate) return;
+        const key = sec.startDate;
+        if (!secByDate[key]) secByDate[key] = [];
+        secByDate[key].push({cat, sec, idx, fileDate});
+      });
+    });
+  });
+
+  // 產生前3、今天、後3共7天
+  const days = [];
+  for (let d = -3; d <= 3; d++) {
+    const dt = new Date(TODAY);
+    dt.setDate(dt.getDate() + d);
+    const key = dt.getFullYear() + '-' +
+      String(dt.getMonth()+1).padStart(2,'0') + '-' +
+      String(dt.getDate()).padStart(2,'0');
+    days.push({dt, key, diff: d});
+  }
+
+  const weekDays = ['日','一','二','三','四','五','六'];
+  let html = '';
+
+  days.forEach(({dt, key, diff}) => {
+    const dayClass = diff === 0 ? 'day-today' : diff < 0 ? 'day-past' : 'day-future';
+    const dayLabel = diff === 0 ? '今天' : diff === -1 ? '昨天' : diff === 1 ? '明天' :
+                     diff < 0 ? `${Math.abs(diff)}天前` : `${diff}天後`;
+    const month = dt.getMonth()+1;
+    const date  = dt.getDate();
+    const wday  = weekDays[dt.getDay()];
+
+    // 篩選此日的 sections
+    const entries = (secByDate[key] || []).filter(({cat, sec}) => {
+      // 過濾類別
+      if (tlFilter !== 'all' && tlFilter !== 'buy2' && tlFilter !== 'b1g1') {
+        if (cat !== tlFilter) return false;
+      }
+      if (tlFilter === 'buy2' && !sec.rows.some(r => r.buy2)) return false;
+      if (tlFilter === 'b1g1' && !sec.rows.some(r => r.buy1get1)) return false;
+      // 搜尋
+      if (q && !sec.label.toLowerCase().includes(q) &&
+          !sec.rows.some(r => (r.name+r.sku).toLowerCase().includes(q))) return false;
+      return true;
+    });
+
+    // 去重：同一個 label+period 只顯示一次
+    const seen = new Set();
+    const unique = entries.filter(({cat, sec}) => {
+      const k = cat + '|' + sec.label + '|' + sec.period;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+
+    // 統計
+    const totalRows  = unique.reduce((a,{sec}) => a + sec.rows.length, 0);
+    const totalBuy2  = unique.reduce((a,{sec}) => a + sec.rows.filter(r=>r.buy2).length, 0);
+    const totalB1G1  = unique.reduce((a,{sec}) => a + sec.rows.filter(r=>r.buy1get1).length, 0);
+
+    let cardsHtml = '';
+    if (unique.length === 0) {
+      cardsHtml = `<div class="tl-empty">無活動開始</div>`;
+    } else {
+      unique.forEach(({cat, sec, idx, fileDate}) => {
+        const b2cnt   = sec.rows.filter(r => r.buy2).length;
+        const b1cnt   = sec.rows.filter(r => r.buy1get1).length;
+        const rowsToShow = q
+          ? sec.rows.filter(r => (r.name+r.sku).toLowerCase().includes(q))
+          : [];
+        const hasMatch = !q || rowsToShow.length > 0;
+        if (!hasMatch) return;
+
+        const endBadge = sec.endDate
+          ? `<span class="badge b-same" style="font-size:10px">至 ${sec.endDate}</span>` : '';
+        const b2badge  = b2cnt ? `<span class="badge b-buy2">💙買2特 ${b2cnt}項</span>` : '';
+        const b1badge  = b1cnt ? `<span class="badge b-b1g1">🎁買1送1 ${b1cnt}項</span>` : '';
+        const catBadge = `<span class="badge b-same">${cat}</span>`;
+
+        // 用可展開的卡片
+        const cardId = 'tlc_' + key + '_' + cat + '_' + idx;
+        cardsHtml += `
+          <div class="tl-card">
+            <div class="tl-card-hd" onclick="toggleTlCard('${cardId}')">
+              ${catBadge}
+              <strong>${sec.label || '—'}</strong>
+              ${endBadge}
+              ${b2badge}${b1badge}
+              <span class="sec-cnt" style="margin-left:auto">${sec.rows.length}項 ▾</span>
+            </div>
+            <div id="${cardId}" style="display:none">
+              ${buildTable(sec.rows.filter(r => !q || (r.name+r.sku).toLowerCase().includes(q)), false)}
+            </div>
+          </div>`;
+      });
+    }
+
+    // 徽章列
+    const badges = unique.length
+      ? `<span class="tl-day-label">${dayLabel}</span>
+         <span class="badge b-same">${unique.length} 個活動</span>
+         ${totalRows ? `<span class="badge" style="background:#f0efeb;color:#555">${totalRows} 項</span>` : ''}
+         ${totalBuy2 ? `<span class="badge b-buy2">💙${totalBuy2}</span>` : ''}
+         ${totalB1G1 ? `<span class="badge b-b1g1">🎁${totalB1G1}</span>` : ''}`
+      : `<span class="tl-day-label" style="color:#bbb">${dayLabel}</span>`;
+
+    html += `
+      <div class="tl-day ${dayClass}">
+        <div class="tl-left">
+          <div class="tl-date-num">${date}</div>
+          <div class="tl-date-sub">${month}月<br>週${wday}</div>
+          <div class="tl-dot"></div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-right">
+          <div class="tl-badge-row">${badges}</div>
+          ${cardsHtml}
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('tl-area').innerHTML = html || '<div class="tl-no-data">沒有符合條件的活動</div>';
+}
+
+function toggleTlCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const arrow = el.previousElementSibling.querySelector('.sec-cnt');
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    if (arrow) arrow.textContent = arrow.textContent.replace('▾','▴');
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = arrow.textContent.replace('▴','▾');
+  }
+}
+
 buildDateTabs();buildCatTabs();renderAlerts();render();}
 
 function buildCatTabs(){
@@ -306,12 +513,12 @@ function renderAlerts(){
   const card=(it,type)=>{
     const b2cnt=it.sec.rows.filter(r=>r.buy2).length;
     const b2txt=it.hasBuy2?` 💙${b2cnt}項買2特價`:'';
-    if(type==='today') return `<div class="ac ac-today" onclick="showM('${it.cat}',${it.idx})">
+    if(type==='today') return `<div class="ac ac-today" onclick="showM('${it.cat}',${it.idx},null,'${it.fileDate}')">
       <div class="ac-tag">🔴 今日開始</div>
       <div class="ac-title">${it.sec.label||'—'}</div>
       <div class="ac-sub">${it.cat}・${it.sec.period}・${it.sec.rows.length}項${b2txt}</div>
       <div class="ac-hint">點擊查看品項 →</div></div>`;
-    if(type==='tmr') return `<div class="ac ac-tmr" onclick="showM('${it.cat}',${it.idx})">
+    if(type==='tmr') return `<div class="ac ac-tmr" onclick="showM('${it.cat}',${it.idx},null,'${it.fileDate}')">
       <div class="ac-tag">🟡 明日開始</div>
       <div class="ac-title">${it.sec.label||'—'}</div>
       <div class="ac-sub">${it.cat}・${it.sec.period}・${it.sec.rows.length}項${b2txt}</div>
@@ -319,7 +526,7 @@ function renderAlerts(){
     if(type==='exp'){
       const d=it.eDiff, icon=d===1?'🚨':d===2?'⚠️':'⏳';
       const b2cnt2=it.sec.rows.filter(r=>r.buy2).length;
-      return `<div class="ac ac-exp" onclick="showM('${it.cat}',${it.idx},'buy2')">
+      return `<div class="ac ac-exp" onclick="showM('${it.cat}',${it.idx},'buy2','${it.fileDate}')">
         <div class="ac-tag">${icon} 買2特價・還有 ${d} 天到期</div>
         <div class="ac-title">${it.sec.label||'—'}</div>
         <div class="ac-sub">${it.cat}・結束：${it.sec.endDate}・${b2cnt2}項買2特價</div>
@@ -327,7 +534,7 @@ function renderAlerts(){
     }
     if(type==='end'){
       const b2cnt3=it.sec.rows.filter(r=>r.buy2).length;
-      return `<div class="ac ac-end" onclick="showM('${it.cat}',${it.idx},'buy2')">
+      return `<div class="ac ac-end" onclick="showM('${it.cat}',${it.idx},'buy2','${it.fileDate}')">
         <div class="ac-tag">🔔 買2特價・今日活動結束</div>
         <div class="ac-title">${it.sec.label||'—'}</div>
         <div class="ac-sub">${it.cat}・結束：${it.sec.endDate}・${b2cnt3}項買2特價</div>
@@ -345,8 +552,9 @@ function renderAlerts(){
   document.getElementById('alert-area').innerHTML=html?`<div class="alert-section">${html}</div>`:'';
 }
 
-function showM(cat,idx,filterMode){
-  const sec=(ALL[curDate][cat]||[])[idx];
+function showM(cat,idx,filterMode,fileDate){
+  const src = fileDate || curDate;
+  const sec=((ALL[src]||{})[cat]||[])[idx];
   if(!sec)return;
   const rows=filterMode==='buy2'?sec.rows.filter(r=>r.buy2):sec.rows;
   const b2cnt=sec.rows.filter(r=>r.buy2).length;
@@ -531,6 +739,168 @@ function setF(f, btn) {
   document.querySelectorAll('.fb').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   render();
+}
+
+// ── 活動時間軸 ────────────────────────────────────────────────────────────
+let tlFilter = 'all';
+
+function enterTimeline() {
+  document.getElementById('timeline-zone').style.display = '';
+  document.getElementById('normal-zone').style.display = 'none';
+  document.getElementById('promo-zone').style.display = 'none';
+  renderTimeline();
+}
+function exitTimeline() {
+  document.getElementById('timeline-zone').style.display = 'none';
+  document.getElementById('normal-zone').style.display = '';
+}
+function setTlF(f, btn) {
+  tlFilter = f;
+  document.querySelectorAll('.fb.ftl').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const q = document.getElementById('tl-search').value.trim().toLowerCase();
+
+  // 蒐集所有日期所有資料裡的 sections，建立 startDate → sections 的 map
+  const secByDate = {};
+  Object.entries(ALL).forEach(([fileDate, cats]) => {
+    Object.entries(cats).forEach(([cat, secs]) => {
+      secs.forEach((sec, idx) => {
+        if (!sec.startDate) return;
+        const key = sec.startDate;
+        if (!secByDate[key]) secByDate[key] = [];
+        secByDate[key].push({cat, sec, idx, fileDate});
+      });
+    });
+  });
+
+  // 產生前3、今天、後3共7天
+  const days = [];
+  for (let d = -3; d <= 3; d++) {
+    const dt = new Date(TODAY);
+    dt.setDate(dt.getDate() + d);
+    const key = dt.getFullYear() + '-' +
+      String(dt.getMonth()+1).padStart(2,'0') + '-' +
+      String(dt.getDate()).padStart(2,'0');
+    days.push({dt, key, diff: d});
+  }
+
+  const weekDays = ['日','一','二','三','四','五','六'];
+  let html = '';
+
+  days.forEach(({dt, key, diff}) => {
+    const dayClass = diff === 0 ? 'day-today' : diff < 0 ? 'day-past' : 'day-future';
+    const dayLabel = diff === 0 ? '今天' : diff === -1 ? '昨天' : diff === 1 ? '明天' :
+                     diff < 0 ? `${Math.abs(diff)}天前` : `${diff}天後`;
+    const month = dt.getMonth()+1;
+    const date  = dt.getDate();
+    const wday  = weekDays[dt.getDay()];
+
+    // 篩選此日的 sections
+    const entries = (secByDate[key] || []).filter(({cat, sec}) => {
+      // 過濾類別
+      if (tlFilter !== 'all' && tlFilter !== 'buy2' && tlFilter !== 'b1g1') {
+        if (cat !== tlFilter) return false;
+      }
+      if (tlFilter === 'buy2' && !sec.rows.some(r => r.buy2)) return false;
+      if (tlFilter === 'b1g1' && !sec.rows.some(r => r.buy1get1)) return false;
+      // 搜尋
+      if (q && !sec.label.toLowerCase().includes(q) &&
+          !sec.rows.some(r => (r.name+r.sku).toLowerCase().includes(q))) return false;
+      return true;
+    });
+
+    // 去重：同一個 label+period 只顯示一次
+    const seen = new Set();
+    const unique = entries.filter(({cat, sec}) => {
+      const k = cat + '|' + sec.label + '|' + sec.period;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+
+    // 統計
+    const totalRows  = unique.reduce((a,{sec}) => a + sec.rows.length, 0);
+    const totalBuy2  = unique.reduce((a,{sec}) => a + sec.rows.filter(r=>r.buy2).length, 0);
+    const totalB1G1  = unique.reduce((a,{sec}) => a + sec.rows.filter(r=>r.buy1get1).length, 0);
+
+    let cardsHtml = '';
+    if (unique.length === 0) {
+      cardsHtml = `<div class="tl-empty">無活動開始</div>`;
+    } else {
+      unique.forEach(({cat, sec, idx, fileDate}) => {
+        const b2cnt   = sec.rows.filter(r => r.buy2).length;
+        const b1cnt   = sec.rows.filter(r => r.buy1get1).length;
+        const rowsToShow = q
+          ? sec.rows.filter(r => (r.name+r.sku).toLowerCase().includes(q))
+          : [];
+        const hasMatch = !q || rowsToShow.length > 0;
+        if (!hasMatch) return;
+
+        const endBadge = sec.endDate
+          ? `<span class="badge b-same" style="font-size:10px">至 ${sec.endDate}</span>` : '';
+        const b2badge  = b2cnt ? `<span class="badge b-buy2">💙買2特 ${b2cnt}項</span>` : '';
+        const b1badge  = b1cnt ? `<span class="badge b-b1g1">🎁買1送1 ${b1cnt}項</span>` : '';
+        const catBadge = `<span class="badge b-same">${cat}</span>`;
+
+        // 用可展開的卡片
+        const cardId = 'tlc_' + key + '_' + cat + '_' + idx;
+        cardsHtml += `
+          <div class="tl-card">
+            <div class="tl-card-hd" onclick="toggleTlCard('${cardId}')">
+              ${catBadge}
+              <strong>${sec.label || '—'}</strong>
+              ${endBadge}
+              ${b2badge}${b1badge}
+              <span class="sec-cnt" style="margin-left:auto">${sec.rows.length}項 ▾</span>
+            </div>
+            <div id="${cardId}" style="display:none">
+              ${buildTable(sec.rows.filter(r => !q || (r.name+r.sku).toLowerCase().includes(q)), false)}
+            </div>
+          </div>`;
+      });
+    }
+
+    // 徽章列
+    const badges = unique.length
+      ? `<span class="tl-day-label">${dayLabel}</span>
+         <span class="badge b-same">${unique.length} 個活動</span>
+         ${totalRows ? `<span class="badge" style="background:#f0efeb;color:#555">${totalRows} 項</span>` : ''}
+         ${totalBuy2 ? `<span class="badge b-buy2">💙${totalBuy2}</span>` : ''}
+         ${totalB1G1 ? `<span class="badge b-b1g1">🎁${totalB1G1}</span>` : ''}`
+      : `<span class="tl-day-label" style="color:#bbb">${dayLabel}</span>`;
+
+    html += `
+      <div class="tl-day ${dayClass}">
+        <div class="tl-left">
+          <div class="tl-date-num">${date}</div>
+          <div class="tl-date-sub">${month}月<br>週${wday}</div>
+          <div class="tl-dot"></div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-right">
+          <div class="tl-badge-row">${badges}</div>
+          ${cardsHtml}
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('tl-area').innerHTML = html || '<div class="tl-no-data">沒有符合條件的活動</div>';
+}
+
+function toggleTlCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const arrow = el.previousElementSibling.querySelector('.sec-cnt');
+  if (el.style.display === 'none') {
+    el.style.display = '';
+    if (arrow) arrow.textContent = arrow.textContent.replace('▾','▴');
+  } else {
+    el.style.display = 'none';
+    if (arrow) arrow.textContent = arrow.textContent.replace('▴','▾');
+  }
 }
 
 buildDateTabs();buildCatTabs();renderAlerts();render();
