@@ -3,34 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>促銷異動追蹤系統</title>
+    <title>異動促銷追蹤系統</title>
     <script src="data.js"></script>
     <style>
-        :root { --primary: #e24b4a; --bg: #f5f5f3; --del: #999; }
+        :root { --primary: #e24b4a; --bg: #f5f5f3; }
         body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 10px; }
         .nav-wrapper { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0; }
         .date-btn { flex: 0 0 75px; padding: 10px 5px; background: white; border: 1px solid #ddd; border-radius: 8px; text-align: center; cursor: pointer; }
         .date-btn.active { background: #333; color: white; }
         .date-btn.today { border: 2px solid var(--primary); color: var(--primary); font-weight: bold; }
-        .filter-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+        .filter-group { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
         .f-btn { padding: 8px 12px; background: #fff; border: 1px solid #ccc; border-radius: 20px; cursor: pointer; font-size: 13px; }
         .f-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .f-btn.active.del-mode { background: #555; border-color: #555; }
+        .f-btn.active.del-btn { background: #666; border-color: #666; }
         
         .card { background: white; border-radius: 10px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); overflow: hidden; }
         .card-hd { padding: 10px; background: #f8f9fa; font-weight: bold; font-size: 13px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
         table { width: 100%; border-collapse: collapse; }
         td { padding: 12px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
         
-        /* 狀態樣式 */
-        tr.is-delete { background-color: #f0f0f0; color: var(--del); }
-        tr.is-delete .price { color: var(--del); text-decoration: line-through; }
+        tr.is-delete { background-color: #f9f9f9; color: #999; }
+        tr.is-delete .p-name { color: #999; text-decoration: line-through; }
         
-        .p-name { font-size: 15px; font-weight: bold; display: block; margin-bottom: 3px; }
+        .p-name { font-size: 15px; font-weight: bold; color: #333; display: block; margin-bottom: 2px; }
         .price { color: var(--primary); font-weight: bold; font-size: 17px; }
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 5px; font-weight: bold; background: #eee; }
-        .b-del { background: #555; color: white; }
-        .b-b1g1 { background: #fff0f0; color: red; border: 1px solid red; }
+        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 5px; background: #eee; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -52,6 +49,7 @@
     <div id="main-content"></div>
 
     <script>
+        // 日期計算修正
         function getD(o) {
             const d = new Date(); d.setDate(d.getDate() + o);
             const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), r = String(d.getDate()).padStart(2,'0');
@@ -80,16 +78,16 @@
 
                         if (rows.length > 0) {
                             found = true;
-                            let h = `<div class="card"><div class="card-hd"><span>${s}</span><small>${sec.startDate}</small></div><table>`;
+                            let h = `<div class="card"><div class="card-hd"><span>${s} | ${sec.label}</span><small>${sec.startDate}</small></div><table>`;
                             rows.forEach(r => {
-                                const delCls = r.isDelete ? 'is-delete' : '';
-                                h += `<tr class="${delCls}"><td><span class="p-name">${r.name}</span><small>${r.sku}</small></td>
-                                    <td style="width:70px;text-align:right"><span class="price">$${r.promo}</span><br><small>$${r.orig}</small></td>
-                                    <td style="width:100px;text-align:right">
-                                        ${r.isDelete ? '<span class="badge b-del">❌ 已取消</span>' : ''}
-                                        ${r.buy1get1 ? '<span class="badge b-b1g1">🎁 買1送1</span>' : ''}
-                                        ${r.buy2 ? '<span class="badge" style="color:blue; border:1px solid blue;">💙 2特$'+r.buy2+'</span>' : ''}
-                                        <div style="font-size:10px; margin-top:4px;">${r.note}</div>
+                                h += `<tr class="${r.isDelete?'is-delete':''}">
+                                    <td><span class="p-name">${r.name}</span><small>${r.sku}</small></td>
+                                    <td style="width:70px; text-align:right"><span class="price">$${r.promo}</span><br><small>$${r.orig}</small></td>
+                                    <td style="width:100px; text-align:right">
+                                        ${r.isDelete?'<span class="badge">❌ 已取消</span>':''}
+                                        ${r.buy1get1?'<span class="badge" style="color:red;border:1px solid red">買1送1</span>':''}
+                                        ${r.buy2?'<span class="badge" style="color:blue;border:1px solid blue">2特$'+r.buy2+'</span>':''}
+                                        <div style="font-size:10px;color:#999;margin-top:4px">${r.note}</div>
                                     </td></tr>`;
                             });
                             cont.innerHTML += h + "</table></div>";
@@ -97,7 +95,7 @@
                     });
                 }
             }
-            if(!found) cont.innerHTML = `<p style="text-align:center;color:#999;padding-top:50px">${curD} 無資料</p>`;
+            if(!found) cont.innerHTML = `<p style="text-align:center;color:#999;padding-top:50px">${curD} 無符合資料</p>`;
         }
 
         function buildNav() {
@@ -112,13 +110,7 @@
             }
         }
         function setCat(c, b) { curC = c; document.querySelectorAll('.filter-group:first-child .f-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); render(); }
-        function toggleF(t, isDelBtn) { 
-            filters[t] = !filters[t]; 
-            const btn = document.getElementById('f-'+t);
-            btn.classList.toggle('active');
-            if(isDelBtn) btn.classList.toggle('del-mode');
-            render(); 
-        }
+        function toggleF(t, isDel) { filters[t] = !filters[t]; const btn = document.getElementById('f-'+t); btn.classList.toggle('active'); if(isDel) btn.classList.toggle('del-btn'); render(); }
         window.onload = () => { buildNav(); render(); };
     </script>
 </body>
