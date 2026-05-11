@@ -1,153 +1,129 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>全聯促銷異動追蹤系統</title>
-    <script src="data.js"></script>
-    <style>
-        :root { --bg: #f5f5f3; --card: #ffffff; --primary: #1a1a18; --secondary: #888; --accent: #e60012; }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; background: var(--bg); color: var(--primary); line-height: 1.5; }
-        .app { max-width: 1100px; margin: 0 auto; padding: 20px; }
-        
-        /* 頂部選單 */
-        .hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-        .date-badge { background: #333; color: white; padding: 5px 15px; border-radius: 20px; font-size: 14px; }
-        
-        select { padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 14px; outline: none; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>異動促銷追蹤系統</title>
+<script src="data.js"></script>
+<style>
+    :root { --primary: #e24b4a; --bg: #f5f5f3; }
+    body { font-family: sans-serif; background: var(--bg); margin: 0; padding: 15px; }
+    .nav-wrapper { display: flex; gap: 5px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 10px; }
+    .date-btn { 
+        flex: 1; min-width: 80px; padding: 10px; background: white; border: 1px solid #ddd; 
+        border-radius: 8px; text-align: center; cursor: pointer; transition: 0.2s;
+    }
+    .date-btn.active { background: #333; color: white; border-color: #333; }
+    .date-btn.today { border: 2px solid var(--primary); color: var(--primary); font-weight: bold; }
+    
+    .stats-row { display: flex; gap: 10px; margin-bottom: 15px; }
+    .stat-item { background: white; padding: 10px; border-radius: 8px; flex: 1; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .stat-num { font-size: 20px; font-weight: bold; display: block; }
+    .stat-label { font-size: 11px; color: #888; }
 
-        /* 統計卡片 */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
-        .stat-card { background: var(--card); padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-left: 4px solid #ddd; }
-        .stat-card.food { border-left-color: #ff9500; }
-        .stat-card.life { border-left-color: #5856d6; }
-        .stat-card.fresh { border-left-color: #34c759; }
-        .stat-label { font-size: 12px; color: var(--secondary); }
-        .stat-val { font-size: 24px; font-weight: bold; margin-top: 5px; }
+    .card { background: white; border-radius: 10px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .card-hd { padding: 12px; background: #eee; font-weight: bold; display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #fafafa; padding: 8px; text-align: left; color: #666; border-bottom: 1px solid #eee; }
+    td { padding: 8px; border-bottom: 1px solid #eee; }
+    
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; color: white; margin-right: 3px; }
+    .b-new { background: #34c759; } .b-chg { background: #ff9500; } .b-del { background: #ff3b30; }
+    .b-b1g1 { background: #af52de; } .b-b2 { background: #007aff; }
 
-        /* 搜尋與分類 */
-        .controls { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
-        .btn { padding: 8px 20px; border-radius: 20px; border: none; background: #ddd; cursor: pointer; white-space: nowrap; transition: 0.3s; }
-        .btn.active { background: #333; color: white; }
-        .search-box { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px; font-size: 16px; }
-
-        /* 資料表格 */
-        .table-container { background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        table { width: 100%; border-collapse: collapse; min-width: 600px; }
-        th { background: #f8f8f8; padding: 12px; text-align: left; font-size: 13px; color: #666; border-bottom: 1px solid #eee; }
-        td { padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-        .price-old { text-decoration: line-through; color: #999; font-size: 12px; }
-        .price-new { color: var(--accent); font-weight: bold; font-size: 16px; }
-        .tag { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #eee; margin-left: 5px; }
-    </style>
+    .cmp-section { margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px; }
+</style>
 </head>
 <body>
-    <div class="app">
-        <header class="hd">
-            <h1>🍎 異動促銷追蹤 <span id="current-date-label" class="date-badge">載入中...</span></h1>
-            <select id="date-select" onchange="changeDate()"></select>
-        </header>
 
-        <div id="stats-area" class="stats-grid"></div>
+    <h2 id="view-title">載入中...</h2>
+    <div class="nav-wrapper" id="date-nav"></div>
 
-        <input type="text" id="search" class="search-box" placeholder="輸入品名關鍵字搜尋..." oninput="render()">
+    <div id="stats" class="stats-row"></div>
+    <div id="main-content"></div>
 
-        <div class="controls">
-            <button class="btn active" onclick="filterCat('全部', this)">全部</button>
-            <button class="btn" onclick="filterCat('食品', this)">食品</button>
-            <button class="btn" onclick="filterCat('用品', this)">用品</button>
-            <button class="btn" onclick="filterCat('生鮮', this)">生鮮</button>
-        </div>
-
-        <div class="table-container">
-            <table id="data-table">
-                <thead>
-                    <tr>
-                        <th>品名規格</th>
-                        <th>現價</th>
-                        <th>促銷價</th>
-                        <th>期間/備註</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody"></tbody>
-            </table>
-        </div>
+    <div class="cmp-section">
+        <h3>比對基準設定</h3>
+        <p style="font-size: 12px; color: #666;">目前的「新增/異動/刪除」是基於最新檔案與前一份檔案的比對結果。</p>
+        <div id="file-list"></div>
     </div>
 
-    <script>
-        let currentCat = '全部';
+<script>
+    const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+    let curDateKey = formatDate(TODAY);
+    const fileKeys = Object.keys(ALL).sort();
+    let cmpFile = fileKeys.length >= 2 ? fileKeys[fileKeys.length - 2] : fileKeys[fileKeys.length - 1];
+
+    function formatDate(d) {
+        return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,'0') + "-" + String(d.getDate()).padStart(2,'0');
+    }
+
+    function buildNav() {
+        const nav = document.getElementById('date-nav');
+        for (let i = -3; i <= 3; i++) {
+            const d = new Date(TODAY); d.setDate(TODAY.getDate() + i);
+            const key = formatDate(d);
+            const btn = document.createElement('div');
+            btn.className = `date-btn ${i === 0 ? 'today' : ''} ${key === curDateKey ? 'active' : ''}`;
+            btn.innerHTML = `<span style="font-size:12px">${d.getMonth()+1}/${d.getDate()}</span><br><span style="font-size:10px">${i===0?'今天':i+'天'}</span>`;
+            btn.onclick = () => { curDateKey = key; buildNav(); render(); };
+            nav.appendChild(btn);
+        }
+        document.getElementById('view-title').innerText = `📅 活動日期：${curDateKey}`;
+    }
+
+    function render() {
+        const content = document.getElementById('main-content');
+        content.innerHTML = "";
         
-        function init() {
-            if (typeof ALL_DATA === 'undefined') {
-                alert('找不到 data.js，請先執行 Python 腳本');
-                return;
-            }
-            const dates = Object.keys(ALL_DATA).sort().reverse();
-            const select = document.getElementById('date-select');
-            dates.forEach(d => {
-                const opt = new Option(`資料日期：${d}`, d);
-                select.add(opt);
-            });
-            render();
-        }
+        let foundAny = false;
+        let totalItems = 0, newItems = 0, b1g1Items = 0, b2Items = 0;
 
-        function changeDate() { render(); }
-
-        function filterCat(cat, btn) {
-            currentCat = cat;
-            document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            render();
-        }
-
-        function render() {
-            const date = document.getElementById('date-select').value;
-            const query = document.getElementById('search').value.toLowerCase();
-            const data = ALL_DATA[date];
-            document.getElementById('current-date-label').innerText = date;
-
-            let combinedRows = [];
-            let stats = { 食品: 0, 用品: 0, 生鮮: 0 };
-
-            // 整合資料並計算統計
-            Object.keys(data).forEach(cat => {
-                data[cat].forEach(section => {
-                    section.rows.forEach(row => {
-                        stats[cat]++;
-                        if (currentCat !== '全部' && cat !== currentCat) return;
-                        if (query && !row.name.toLowerCase().includes(query)) return;
-                        combinedRows.push({ ...row, cat, period: section.period });
-                    });
+        // 遍歷所有檔案，尋找在選定日期「開始」的活動
+        fileKeys.forEach(fKey => {
+            const dayData = ALL[fKey];
+            Object.entries(dayData).forEach(([cat, sections]) => {
+                sections.forEach(sec => {
+                    if (sec.startDate === curDateKey) {
+                        foundAny = true;
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        card.innerHTML = `<div class="card-hd"><span>[${cat}] ${sec.label}</span><span style="font-size:11px">${sec.period}</span></div>`;
+                        
+                        let rowsHtml = sec.rows.map(r => {
+                            totalItems++;
+                            if (r.buy1get1) b1g1Items++;
+                            if (r.buy2) b2Items++;
+                            
+                            return `<tr>
+                                <td>${r.name}</td>
+                                <td>${r.orig}</td>
+                                <td style="color:red; font-weight:bold;">${r.promo}</td>
+                                <td>
+                                    ${r.buy1get1 ? '<span class="badge b-b1g1">買1送1</span>':''}
+                                    ${r.buy2 ? `<span class="badge b-b2">買2特$${r.buy2}</span>`:''}
+                                    <span style="font-size:10px; color:#888">${r.note}</span>
+                                </td>
+                            </tr>`;
+                        }).join('');
+                        
+                        card.innerHTML += `<table><thead><tr><th>品名</th><th>原價</th><th>促銷</th><th>標記</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+                        content.appendChild(card);
+                    }
                 });
             });
+        });
 
-            // 更新統計卡片
-            document.getElementById('stats-area').innerHTML = `
-                <div class="stat-card food"><div class="stat-label">食品類</div><div class="stat-val">${stats.食品}</div></div>
-                <div class="stat-card life"><div class="stat-label">用品類</div><div class="stat-val">${stats.用品}</div></div>
-                <div class="stat-card fresh"><div class="stat-label">生鮮類</div><div class="stat-val">${stats.生鮮}</div></div>
-            `;
+        if (!foundAny) content.innerHTML = "<div style='text-align:center; padding:50px; color:#aaa;'>此日期無新開始的活動</div>";
 
-            // 渲染表格
-            const tbody = document.getElementById('tbody');
-            tbody.innerHTML = combinedRows.map(r => `
-                <tr>
-                    <td>
-                        <span style="color:#666; font-size:11px;">[${r.cat}]</span><br>
-                        <b>${r.name}</b>
-                    </td>
-                    <td><span class="price-old">${r.old_price || ''}</span></td>
-                    <td><span class="price-new">${r.new_price}</span></td>
-                    <td>
-                        <span style="font-size:12px; color:#555;">${r.period}</span><br>
-                        <span class="tag">${r.memo || ''}</span>
-                    </td>
-                </tr>
-            `).join('');
-        }
+        document.getElementById('stats').innerHTML = `
+            <div class="stat-item"><span class="stat-num">${totalItems}</span><span class="stat-label">總項</span></div>
+            <div class="stat-item"><span class="stat-num">${b1g1Items}</span><span class="stat-label">買1送1</span></div>
+            <div class="stat-item"><span class="stat-num">${b2Items}</span><span class="stat-label">買2特價</span></div>
+        `;
+    }
 
-        window.onload = init;
-    </script>
+    window.onload = () => { buildNav(); render(); };
+</script>
 </body>
 </html>
