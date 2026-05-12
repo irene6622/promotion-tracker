@@ -222,24 +222,22 @@ function getDiff(rows,cmpR){
   });
 }
 function getDel(cat){
-  // 改為：找所有在今天或昨天結束的活動（endDate = today 或 yesterday）
-  var YESTERDAY=new Date(TODAY);YESTERDAY.setDate(YESTERDAY.getDate()-1);
-  var result=[];
-  var seen={};
+  // 以點選的日期（curDay）為基準，顯示當天及前一天結束的活動
+  var selDate=toD(curDay);
+  var prevDate=new Date(selDate);prevDate.setDate(prevDate.getDate()-1);
+  var result=[];var seen={};
   Object.keys(ALL).forEach(function(fd){
     var cats=ALL[fd];
     if(!cats[cat])return;
-    cats[cat].forEach(function(sec,idx){
+    cats[cat].forEach(function(sec){
       if(!sec.endDate)return;
-      var ed=toD(sec.endDate);
-      if(!ed)return;
-      var diff=dd(ed,TODAY);
-      // 今天結束(diff=0) 或 昨天結束(diff=-1)
-      if(diff!==0&&diff!==-1)return;
+      var ed=toD(sec.endDate);if(!ed)return;
+      var diffSel=dd(ed,selDate);
+      // 當天結束(0) 或 前一天結束(-1)
+      if(diffSel!==0&&diffSel!==-1)return;
       var uid=cat+'|'+(sec.label||'')+'|'+(sec.period||'');
-      if(seen[uid])return;
-      seen[uid]=1;
-      var label=diff===0?'今日結束':'昨日結束';
+      if(seen[uid])return;seen[uid]=1;
+      var label=diffSel===0?'當日結束':'前日結束';
       sec.rows.forEach(function(r){
         result.push(Object.assign({},r,{diff:'del',expLabel:label,secLabel:sec.label,secPeriod:sec.period}));
       });
@@ -313,10 +311,10 @@ function render(){
       var del=getDel(cat).filter(function(r){return!q||(r.name+r.sku).toLowerCase().indexOf(q)>=0;});
       if(!del.length)return;
       // 依 expLabel 分組
-      var todayDel=del.filter(function(r){return r.expLabel==='今日結束';});
-      var yestDel=del.filter(function(r){return r.expLabel==='昨日結束';});
-      if(todayDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#9333ea">🔔 今日結束品項</span><span class="card-cnt">'+todayDel.length+'項 ▾</span></div><div class="card-body open">'+buildTbl(todayDel,false)+'</div></div>';
-      if(yestDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#888">昨日結束品項</span><span class="card-cnt">'+yestDel.length+'項 ▾</span></div><div class="card-body">'+buildTbl(yestDel,false)+'</div></div>';
+      var todayDel=del.filter(function(r){return r.expLabel==='當日結束';});
+      var yestDel=del.filter(function(r){return r.expLabel==='前日結束';});
+      if(todayDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#9333ea">🔔 當日結束品項</span><span class="card-cnt">'+todayDel.length+'項 ▾</span></div><div class="card-body open">'+buildTbl(todayDel,false)+'</div></div>';
+      if(yestDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#888">前日結束品項</span><span class="card-cnt">'+yestDel.length+'項 ▾</span></div><div class="card-body">'+buildTbl(yestDel,false)+'</div></div>';
     });
   }
   if(!acts.length&&curF!=='dl'){if(!h)h='<div class="noact">這天沒有活動開始</div>';}
@@ -349,47 +347,82 @@ function render(){
   document.getElementById('actarea').innerHTML=h;
 }
 function renderAlerts(){
-  var st=[],tm=[],ex=[],en=[];var seen={};
+  // 只顯示最重要的 4 種提醒：今明開始的2特/買1送1、今明到期的2特/買1送1
+  var s2t=[],s2tm=[],s1t=[],s1tm=[];   // 今日/明日開始的 buy2 / b1g1
+  var e2t=[],e2tm=[],e1t=[],e1tm=[];   // 今日/明日到期的 buy2 / b1g1
+  var seen={};
+
   Object.keys(ALL).forEach(function(fd){
     Object.keys(ALL[fd]).forEach(function(cat){
       ALL[fd][cat].forEach(function(sec,idx){
         var sd=toD(sec.startDate),ed=toD(sec.endDate);
         if(ed&&ed<TODAY)return;
-        var sdiff=sd?dd(sd,TODAY):null,ediff=ed?dd(ed,TODAY):null;
-        var hb2=sec.rows.some(function(r){return r.buy2;});
-        var k=cat+'|'+(sec.label||'')+'|'+(sec.period||'');
-        if(sdiff===0&&!seen['s|'+k]){seen['s|'+k]=1;st.push({cat:cat,sec:sec,idx:idx,hb2:hb2,fd:fd});}
-        else if(sdiff===1&&!seen['t|'+k]){seen['t|'+k]=1;tm.push({cat:cat,sec:sec,idx:idx,hb2:hb2,fd:fd});}
-        if(hb2&&ediff!==null){
-          if(ediff===0&&!seen['e|'+k]){seen['e|'+k]=1;en.push({cat:cat,sec:sec,idx:idx,fd:fd});}
-          else if(ediff>=1&&ediff<=3&&!seen['x|'+k]){seen['x|'+k]=1;ex.push({cat:cat,sec:sec,idx:idx,ed:ediff,fd:fd});}
+        var sdiff=sd?dd(sd,TODAY):null;
+        var ediff=ed?dd(ed,TODAY):null;
+        var hasBuy2=sec.rows.some(function(r){return r.buy2;});
+        var hasB1g1=sec.rows.some(function(r){return r.buy1get1;});
+        var key=cat+'|'+(sec.label||'')+'|'+(sec.period||'');
+
+        // 今明開始的買2特
+        if(hasBuy2){
+          if(sdiff===0&&!seen['s2t|'+key]){seen['s2t|'+key]=1;s2t.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+          else if(sdiff===1&&!seen['s2tm|'+key]){seen['s2tm|'+key]=1;s2tm.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+        }
+        // 今明開始的買1送1
+        if(hasB1g1){
+          if(sdiff===0&&!seen['s1t|'+key]){seen['s1t|'+key]=1;s1t.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+          else if(sdiff===1&&!seen['s1tm|'+key]){seen['s1tm|'+key]=1;s1tm.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+        }
+        // 今明到期的買2特
+        if(hasBuy2&&ediff!==null){
+          if(ediff===0&&!seen['e2t|'+key]){seen['e2t|'+key]=1;e2t.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+          else if(ediff===1&&!seen['e2tm|'+key]){seen['e2tm|'+key]=1;e2tm.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+        }
+        // 今明到期的買1送1
+        if(hasB1g1&&ediff!==null){
+          if(ediff===0&&!seen['e1t|'+key]){seen['e1t|'+key]=1;e1t.push({cat:cat,sec:sec,idx:idx,fd:fd});}
+          else if(ediff===1&&!seen['e1tm|'+key]){seen['e1tm|'+key]=1;e1tm.push({cat:cat,sec:sec,idx:idx,fd:fd});}
         }
       });
     });
   });
-  ex.sort(function(a,b){return a.ed-b.ed;});
+
   function mkCard(it,tp){
     var b2c=it.sec.rows.filter(function(r){return r.buy2;}).length;
-    var b2t=it.hb2?' 💙'+b2c+'項買2特':'';
-    var nm=it.sec.rows.length;
-    var cl,tag;
-    if(tp==='st'){cl='ac-r';tag='🔴 今日開始';}
-    else if(tp==='tm'){cl='ac-a';tag='🟡 明日開始';}
-    else if(tp==='ex'){cl='ac-o';var ic=it.ed===1?'🚨':it.ed===2?'⚠️':'⏳';tag=ic+' 買2特・還有'+it.ed+'天到期';}
-    else{cl='ac-p';tag='🔔 買2特・今日結束';}
-    var onclick=tp==='ex'||tp==='en'?
-      'showM(\''+it.cat+'\','+it.idx+',\'b2\',\''+it.fd+'\')':
-      'showM(\''+it.cat+'\','+it.idx+',null,\''+it.fd+'\')';
-    var sub=tp==='ex'||tp==='en'?
-      it.cat+'・結束：'+it.sec.endDate+'・'+b2c+'項買2特':
-      it.cat+'・'+it.sec.period+'・'+nm+'項'+b2t;
-    return '<div class="ac '+cl+'" onclick="'+onclick+'"><div class="ac-tag">'+tag+'</div><div class="ac-title">'+(it.sec.label||'—')+'</div><div class="ac-sub">'+sub+'</div><div class="ac-hint">點擊查看 →</div></div>';
+    var b1c=it.sec.rows.filter(function(r){return r.buy1get1;}).length;
+    var cl,tag,sub,fm;
+    if(tp==='s2t') {cl='ac-r';tag='🔴 今日開始・買2特';sub=it.cat+'・'+it.sec.period+'・'+b2c+'項買2特';fm='b2';}
+    else if(tp==='s2tm'){cl='ac-a';tag='🟡 明日開始・買2特';sub=it.cat+'・'+it.sec.period+'・'+b2c+'項買2特';fm='b2';}
+    else if(tp==='s1t') {cl='ac-r';tag='🔴 今日開始・買1送1';sub=it.cat+'・'+it.sec.period+'・'+b1c+'項買1送1';fm='b1';}
+    else if(tp==='s1tm'){cl='ac-a';tag='🟡 明日開始・買1送1';sub=it.cat+'・'+it.sec.period+'・'+b1c+'項買1送1';fm='b1';}
+    else if(tp==='e2t') {cl='ac-p';tag='🔔 今日到期・買2特';sub=it.cat+'・結束：'+it.sec.endDate+'・'+b2c+'項';fm='b2';}
+    else if(tp==='e2tm'){cl='ac-o';tag='⏳ 明日到期・買2特';sub=it.cat+'・結束：'+it.sec.endDate+'・'+b2c+'項';fm='b2';}
+    else if(tp==='e1t') {cl='ac-p';tag='🔔 今日到期・買1送1';sub=it.cat+'・結束：'+it.sec.endDate+'・'+b1c+'項';fm='b1';}
+    else               {cl='ac-o';tag='⏳ 明日到期・買1送1';sub=it.cat+'・結束：'+it.sec.endDate+'・'+b1c+'項';fm='b1';}
+    return '<div class="ac '+cl+'" onclick="showM(''+it.cat+'','+it.idx+',''+fm+'',''+it.fd+'')">'+
+      '<div class="ac-tag">'+tag+'</div>'+
+      '<div class="ac-title">'+(it.sec.label||'—')+'</div>'+
+      '<div class="ac-sub">'+sub+'</div>'+
+      '<div class="ac-hint">點擊查看 →</div></div>';
   }
+
   var h='';
-  if(st.length)h+='<div class="al-lbl"><span class="dot dot-r"></span>今日開始活動</div><div class="al-grid">'+st.map(function(it){return mkCard(it,'st');}).join('')+'</div>';
-  if(tm.length)h+='<div class="al-lbl"><span class="dot dot-a"></span>明日開始活動</div><div class="al-grid">'+tm.map(function(it){return mkCard(it,'tm');}).join('')+'</div>';
-  if(ex.length)h+='<div class="al-lbl"><span class="dot dot-o"></span>買2特即將結束</div><div class="al-grid">'+ex.map(function(it){return mkCard(it,'ex');}).join('')+'</div>';
-  if(en.length)h+='<div class="al-lbl"><span class="dot dot-p"></span>買2特今日結束！</div><div class="al-grid">'+en.map(function(it){return mkCard(it,'en');}).join('')+'</div>';
+  // 開始提醒
+  var startCards='';
+  if(s2t.length) startCards+=s2t.map(function(it){return mkCard(it,'s2t');}).join('');
+  if(s1t.length) startCards+=s1t.map(function(it){return mkCard(it,'s1t');}).join('');
+  if(s2tm.length)startCards+=s2tm.map(function(it){return mkCard(it,'s2tm');}).join('');
+  if(s1tm.length)startCards+=s1tm.map(function(it){return mkCard(it,'s1tm');}).join('');
+  if(startCards) h+='<div class="al-lbl"><span class="dot dot-r"></span>今明開始・特價活動</div><div class="al-grid">'+startCards+'</div>';
+
+  // 到期提醒
+  var expCards='';
+  if(e2t.length) expCards+=e2t.map(function(it){return mkCard(it,'e2t');}).join('');
+  if(e1t.length) expCards+=e1t.map(function(it){return mkCard(it,'e1t');}).join('');
+  if(e2tm.length)expCards+=e2tm.map(function(it){return mkCard(it,'e2tm');}).join('');
+  if(e1tm.length)expCards+=e1tm.map(function(it){return mkCard(it,'e1tm');}).join('');
+  if(expCards) h+='<div class="al-lbl" style="margin-top:'+(startCards?'14px':'0')+'"><span class="dot dot-p"></span>今明到期・特價活動</div><div class="al-grid">'+expCards+'</div>';
+
   document.getElementById('alrt').innerHTML=h?'<div class="al-sec">'+h+'</div>':'';
 }
 function showM(cat,idx,fm,fd){
