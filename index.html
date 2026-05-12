@@ -221,12 +221,31 @@ function getDiff(rows,cmpR){
     return Object.assign({},r,{diff:'same'});
   });
 }
-function getDel(acts,cat){
-  var cmpR=getCmpR(cat);
-  if(!cmpR.length)return[];
-  var keys={};
-  acts.filter(function(a){return a.cat===cat;}).forEach(function(a){a.sec.rows.forEach(function(r){keys[r.sku||r.name]=1;});});
-  return cmpR.filter(function(r){return!keys[r.sku||r.name];}).map(function(r){return Object.assign({},r,{diff:'del'});});
+function getDel(cat){
+  // 改為：找所有在今天或昨天結束的活動（endDate = today 或 yesterday）
+  var YESTERDAY=new Date(TODAY);YESTERDAY.setDate(YESTERDAY.getDate()-1);
+  var result=[];
+  var seen={};
+  Object.keys(ALL).forEach(function(fd){
+    var cats=ALL[fd];
+    if(!cats[cat])return;
+    cats[cat].forEach(function(sec,idx){
+      if(!sec.endDate)return;
+      var ed=toD(sec.endDate);
+      if(!ed)return;
+      var diff=dd(ed,TODAY);
+      // 今天結束(diff=0) 或 昨天結束(diff=-1)
+      if(diff!==0&&diff!==-1)return;
+      var uid=cat+'|'+(sec.label||'')+'|'+(sec.period||'');
+      if(seen[uid])return;
+      seen[uid]=1;
+      var label=diff===0?'今日結束':'昨日結束';
+      sec.rows.forEach(function(r){
+        result.push(Object.assign({},r,{diff:'del',expLabel:label,secLabel:sec.label,secPeriod:sec.period}));
+      });
+    });
+  });
+  return result;
 }
 function renderSt(){
   var acts=getActs(curDay);
@@ -243,7 +262,7 @@ function renderSt(){
     });
   });
   var dk={};
-  Object.keys(cats).forEach(function(cat){getDel(acts,cat).forEach(function(r){var k=cat+'|'+(r.sku||r.name);if(!dk[k]){dk[k]=1;nd++;}});});
+  Object.keys(cats).forEach(function(cat){getDel(cat).forEach(function(r){var k=cat+'|'+(r.sku||r.name);if(!dk[k]){dk[k]=1;nd++;}});});
   var sel=DAYS.filter(function(x){return x.key===curDay;})[0];
   var lbl=sel?(sel.diff===0?'今天':sel.diff===-1?'昨天':sel.diff===1?'明天':sel.diff<0?Math.abs(sel.diff)+'天前':sel.diff+'天後'):'';
   document.getElementById('strow').innerHTML=
@@ -291,9 +310,13 @@ function render(){
   var h='';
   if(curF==='dl'||curF==='all'){
     ['食品','用品','生鮮'].forEach(function(cat){
-      var del=getDel(acts,cat).filter(function(r){return!q||(r.name+r.sku).toLowerCase().indexOf(q)>=0;});
+      var del=getDel(cat).filter(function(r){return!q||(r.name+r.sku).toLowerCase().indexOf(q)>=0;});
       if(!del.length)return;
-      h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#a32d2d">已刪除品項</span><span class="card-cnt">'+del.length+'項 ▾</span></div><div class="card-body open">'+buildTbl(del,true)+'</div></div>';
+      // 依 expLabel 分組
+      var todayDel=del.filter(function(r){return r.expLabel==='今日結束';});
+      var yestDel=del.filter(function(r){return r.expLabel==='昨日結束';});
+      if(todayDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#9333ea">🔔 今日結束品項</span><span class="card-cnt">'+todayDel.length+'項 ▾</span></div><div class="card-body open">'+buildTbl(todayDel,false)+'</div></div>';
+      if(yestDel.length)h+='<div class="card"><div class="card-hd" onclick="toggleCard(this)"><span class="cat-tag '+ctCls(cat)+'">'+cat+'</span><span class="card-title" style="color:#888">昨日結束品項</span><span class="card-cnt">'+yestDel.length+'項 ▾</span></div><div class="card-body">'+buildTbl(yestDel,false)+'</div></div>';
     });
   }
   if(!acts.length&&curF!=='dl'){if(!h)h='<div class="noact">這天沒有活動開始</div>';}
