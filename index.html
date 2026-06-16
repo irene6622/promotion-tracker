@@ -280,6 +280,7 @@ tr.adj-up td{background:#fff8f0}
 
 
 
+
 <div class="app">
   <div class="hd"><h1>異動促銷追蹤</h1><span class="today-lbl" id="tlbl"></span></div>
   <div id="alrt"></div>
@@ -480,15 +481,27 @@ function setDay(k){curDay=k;buildDN();renderSt();render();}
 
 function clickStat(f){
   if(curDay!==DAYS[3].key){setDay(DAYS[3].key);}
-  var allBtns=document.querySelectorAll('.fb');
+  // 清除所有篩選按鈕的 on 狀態
+  document.querySelectorAll('.fb').forEach(function(b){b.classList.remove('on');});
+  // 找對應按鈕並觸發
   if(f==='all'){
-    for(var i=0;i<allBtns.length;i++){if(allBtns[i].classList.contains('fa')){allBtns[i].click();return;}}
+    var allBtns=document.querySelectorAll('.fb');
+    for(var i=0;i<allBtns.length;i++){
+      if(allBtns[i].classList.contains('fa')){
+        allBtns[i].classList.add('on');
+        curF='all';render();return;
+      }
+    }
     return;
   }
+  var allBtns=document.querySelectorAll('.fb');
   for(var i=0;i<allBtns.length;i++){
     var b=allBtns[i];
     var attr=b.getAttribute('onclick')||'';
-    if(attr.indexOf("'"+f+"'")!==-1){b.click();return;}
+    if(attr.indexOf("'"+f+"'")!==-1){
+      b.classList.add('on');
+      curF=f;render();return;
+    }
   }
 }
 
@@ -564,7 +577,7 @@ function getDel(cat){
 
 function renderSt(){
   var acts=getActs(curDay);
-  var total=0,b2=0,b1=0,nw=0,nc=0,nd=0,adjDown=0,adjUp=0;
+  var total=0,b2=0,b1=0,nc=0,nd=0,adjDown=0,adjUp=0;
   var cats={};
   acts.forEach(function(a){
     if(a.isAdj){
@@ -576,7 +589,7 @@ function renderSt(){
       total++;
       if(r.buy2)b2++;
       if(r.buy1get1)b1++;
-      if(r.diff==='new')nw++;
+      // 新增統計已移除
       if(r.diff==='chg')nc++;
     });
   });
@@ -591,15 +604,14 @@ function renderSt(){
     return '<div class="st '+cls+'" style="cursor:pointer;transition:.15s;'+style+'" data-f="'+f+'">'+content+'</div>';
   }
   document.getElementById('strow').innerHTML=
-    mkSt('s1','','all','<span class="st-n">'+acts.length+'</span><span class="st-l">'+lbl+'開始/生效的活動</span>')+
-    (total?mkSt('s2','','all','<span class="st-n">'+total+'</span><span class="st-l">降價品項</span>'):'')+
+    mkSt('s1','','all','<span class="st-n">'+acts.length+'</span><span class="st-l">'+lbl+'開始活動</span>')+
+    (total?mkSt('s2','','all','<span class="st-n">'+total+'</span><span class="st-l">所有品項</span>'):'')+
     (adjDown?mkSt('','border-color:#e24b4a','adjdown','<span class="st-n" style="color:#e24b4a">'+adjDown+'</span><span class="st-l">調價↓降</span>'):'')+
     (adjUp?mkSt('','border-color:#f97316','adjup','<span class="st-n" style="color:#f97316">'+adjUp+'</span><span class="st-l">調價↑漲</span>'):'')+
     (b2?mkSt('s3','','b2','<span class="st-n">'+b2+'</span><span class="st-l">買2特價</span>'):'')+
     (b1?mkSt('s4','','b1','<span class="st-n">'+b1+'</span><span class="st-l">買1送1</span>'):'')+
-    (nw?mkSt('s5','','nw','<span class="st-n">'+nw+'</span><span class="st-l">新增（vs '+cmpF+'）</span>'):'')+
-    (nd?mkSt('s6','','dl','<span class="st-n">'+nd+'</span><span class="st-l">今昨結束品項</span>'):'')+
-    (nc?mkSt('s7','','ch','<span class="st-n">'+nc+'</span><span class="st-l">異動（vs '+cmpF+'）</span>'):'');
+    (nd?mkSt('s6','','dl','<span class="st-n">'+nd+'</span><span class="st-l">今昨到期</span>'):'')+
+    (nc?mkSt('s7','','ch','<span class="st-n">'+nc+'</span><span class="st-l">異動品項</span>'):'');
   // 綁定點擊事件
   document.getElementById('strow').onclick=function(e){
     var el=e.target.closest('[data-f]');
@@ -955,23 +967,8 @@ function renderAlerts(){
   }
 
   var h='';
-  var sc='';
-  if(s2t.length)sc+=s2t.map(function(it){return mkCard(it,'s2t');}).join('');
-  if(s1t.length)sc+=s1t.map(function(it){return mkCard(it,'s1t');}).join('');
-  if(s2tm.length)sc+=s2tm.map(function(it){return mkCard(it,'s2tm');}).join('');
-  if(s1tm.length)sc+=s1tm.map(function(it){return mkCard(it,'s1tm');}).join('');
-  if(sc)h+='<div class="al-grid">'+sc+'</div>';
-
-  var ec='';
-  if(e2t.length)ec+=e2t.map(function(it){return mkCard(it,'e2t');}).join('');
-  if(e1t.length)ec+=e1t.map(function(it){return mkCard(it,'e1t');}).join('');
-  if(e2tm.length)ec+=e2tm.map(function(it){return mkCard(it,'e2tm');}).join('');
-  if(e1tm.length)ec+=e1tm.map(function(it){return mkCard(it,'e1tm');}).join('');
-  if(ec)h+='<div style="margin-top:'+(sc?'14px':'0')+'"><div class="al-grid">'+ec+'</div></div>';
-
-  var topDisc=renderTopDiscountAlerts();
-  if(topDisc)h=topDisc+(h?'<div style="height:14px"></div>'+h:'');
-  document.getElementById('alrt').innerHTML=h?'<div class="al-sec">'+h+'</div>':'';
+  // 只保留降幅最大活動，移除買2特/買1送1提醒卡片
+    document.getElementById('alrt').innerHTML=h?'<div class="al-sec">'+h+'</div>':'';
 }
 
 function showM(cat,idx,fm,fd){
@@ -996,6 +993,7 @@ function closeM(){document.getElementById('mbg').classList.remove('open');}
 function setF(f,btn){curF=f;document.querySelectorAll('.fb').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');render();}
 
 buildDN();buildCmp();renderAlerts();renderSt();render();
+
 
 
 
